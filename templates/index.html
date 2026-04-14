@@ -210,6 +210,8 @@
       color: var(--danger-text);
       background: var(--danger-bg);
       border-color: #4b2529;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
 
     table {
@@ -384,7 +386,7 @@
   </header>
 
   <div class="container">
-    <div class="top-grid" id="summary-grid">
+    <div class="top-grid">
       <div class="summary-card">
         <div class="summary-label">Employees</div>
         <div class="summary-value" id="sum-employees">-</div>
@@ -472,11 +474,23 @@
   </div>
 
   <script>
-    const BASE = "http://127.0.0.1:5000";
+    const BASE = "";
 
     async function fetchJSON(url) {
-      const res = await fetch(url);
-      const data = await res.json();
+      const response = await fetch(url);
+      const contentType = response.headers.get("content-type") || "";
+
+      if (!contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(`Expected JSON from ${url}, but got:\n${text}`);
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || `Request failed: ${response.status}`);
+      }
+
       return data;
     }
 
@@ -529,9 +543,8 @@
     async function loadSummary() {
       try {
         const res = await fetchJSON(`${BASE}/dashboard/summary`);
-        if (!res.success) return;
-
         const data = res.data || {};
+
         document.getElementById("sum-employees").textContent = data.total_employees ?? "-";
         document.getElementById("sum-skills").textContent = data.total_skills ?? "-";
         document.getElementById("sum-projects").textContent = data.total_projects ?? "-";
@@ -539,6 +552,11 @@
         document.getElementById("sum-courses").textContent = data.total_courses ?? "-";
       } catch (error) {
         console.error("Summary load error:", error);
+        document.getElementById("sum-employees").textContent = "!";
+        document.getElementById("sum-skills").textContent = "!";
+        document.getElementById("sum-projects").textContent = "!";
+        document.getElementById("sum-jobroles").textContent = "!";
+        document.getElementById("sum-courses").textContent = "!";
       }
     }
 
@@ -575,8 +593,22 @@
             `;
           });
         });
+
+        if (!projects.length) {
+          setEmpty("recommend-result", "No projects found in database.");
+          setEmpty("gaps-result", "No projects found in database.");
+        }
+
+        if (!employees.length) {
+          setEmpty("training-result", "No employees found in database.");
+          setEmpty("jobs-result", "No employees found in database.");
+        }
       } catch (error) {
         console.error("Init selector error:", error);
+        setError("recommend-result", `Failed to load projects/employees.\n${error.message}`);
+        setError("gaps-result", `Failed to load projects.\n${error.message}`);
+        setError("training-result", `Failed to load employees.\n${error.message}`);
+        setError("jobs-result", `Failed to load employees.\n${error.message}`);
       }
     }
 
@@ -608,12 +640,6 @@
 
       try {
         const res = await fetchJSON(`${BASE}/recommend/employees/${projectId}`);
-
-        if (!res.success) {
-          setError(target, res.message || "Could not fetch recommendations.");
-          return;
-        }
-
         const payload = res.data || {};
         const project = payload.project || {};
         const recommendations = payload.recommendations || [];
@@ -638,7 +664,12 @@
             </tr>
             ${recommendations.map(item => `
               <tr>
-                <td><strong>${escapeHtml(item.employee_name)}</strong><br><span style="color: var(--muted); font-size:12px;">${escapeHtml(item.employee_id)}</span></td>
+                <td>
+                  <strong>${escapeHtml(item.employee_name)}</strong><br>
+                  <span style="color: var(--muted); font-size:12px;">
+                    ${escapeHtml(item.employee_id)}
+                  </span>
+                </td>
                 <td>${escapeHtml(item.department)}</td>
                 <td>${escapeHtml(item.matched_count)} / ${escapeHtml(item.total_required)}</td>
                 <td>
@@ -663,7 +694,7 @@
         `;
       } catch (error) {
         console.error(error);
-        setError(target, "Failed to load employee recommendations.");
+        setError(target, `Failed to load employee recommendations.\n${error.message}`);
       }
     }
 
@@ -680,12 +711,6 @@
 
       try {
         const res = await fetchJSON(`${BASE}/gaps/project/${projectId}`);
-
-        if (!res.success) {
-          setError(target, res.message || "Could not fetch gap analysis.");
-          return;
-        }
-
         const payload = res.data || {};
         const project = payload.project || {};
         const gaps = payload.skill_gaps || [];
@@ -728,7 +753,7 @@
         `;
       } catch (error) {
         console.error(error);
-        setError(target, "Failed to analyze skill gaps.");
+        setError(target, `Failed to analyze skill gaps.\n${error.message}`);
       }
     }
 
@@ -745,12 +770,6 @@
 
       try {
         const res = await fetchJSON(`${BASE}/training/${employeeId}`);
-
-        if (!res.success) {
-          setError(target, res.message || "Could not fetch training paths.");
-          return;
-        }
-
         const payload = res.data || {};
         const employee = payload.employee || {};
         const trainingPaths = payload.training_paths || [];
@@ -771,7 +790,9 @@
                 <div class="training-header">
                   <div>
                     <div class="training-title">${escapeHtml(path.job_role)}</div>
-                    <div class="training-sub">Role Level: ${escapeHtml(path.role_level)} | Total Gap: ${escapeHtml(path.total_gap)}</div>
+                    <div class="training-sub">
+                      Role Level: ${escapeHtml(path.role_level)} | Total Gap: ${escapeHtml(path.total_gap)}
+                    </div>
                   </div>
                   <span class="badge ${Number(path.total_gap || 0) <= 3 ? "badge-success" : Number(path.total_gap || 0) <= 6 ? "badge-warning" : "badge-danger"}">
                     Gap ${escapeHtml(path.total_gap)}
@@ -812,7 +833,7 @@
         `;
       } catch (error) {
         console.error(error);
-        setError(target, "Failed to load training paths.");
+        setError(target, `Failed to load training paths.\n${error.message}`);
       }
     }
 
@@ -829,12 +850,6 @@
 
       try {
         const res = await fetchJSON(`${BASE}/recommend/jobs/${employeeId}`);
-
-        if (!res.success) {
-          setError(target, res.message || "Could not fetch job recommendations.");
-          return;
-        }
-
         const payload = res.data || {};
         const employee = payload.employee || {};
         const jobs = payload.job_recommendations || [];
@@ -884,7 +899,7 @@
         `;
       } catch (error) {
         console.error(error);
-        setError(target, "Failed to load job recommendations.");
+        setError(target, `Failed to load job recommendations.\n${error.message}`);
       }
     }
 
@@ -894,8 +909,8 @@
     document.getElementById("jobs-btn").addEventListener("click", loadJobRecommendations);
 
     initTabs();
-    initSelectors();
     loadSummary();
+    initSelectors();
   </script>
 </body>
 </html>
