@@ -1,10 +1,9 @@
 import os
 from neo4j import GraphDatabase
 
-URI = os.getenv("neo4j://127.0.0.1:7687")
-USERNAME = os.getenv("neo4j")
-PASSWORD = os.getenv("P@$$w0rd")
-
+URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
+PASSWORD = os.getenv("NEO4J_PASSWORD", "P@$$w0rd")
 
 class Neo4jDB:
     def __init__(self):
@@ -17,6 +16,5 @@ class Neo4jDB:
         with self.driver.session() as session:
             result = session.run(query, parameters or {})
             return [record.data() for record in result]
-
 
 db = Neo4jDB()
